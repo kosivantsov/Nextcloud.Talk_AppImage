@@ -1,3 +1,10 @@
+name: Build Nextcloud Talk AppImage
+
+on:
+  schedule:
+    - cron: '0 6 * * 1' # Runs every Monday at 06:00 UTC
+  workflow_dispatch:    # Allows manual triggering from the Actions tab
+
 jobs:
   build-and-release:
     runs-on: ubuntu-22.04
@@ -6,7 +13,6 @@ jobs:
 
     steps:
       - name: Check out repository
-        # Updated to native Node 24 version
         uses: actions/checkout@v5 
 
       - name: Get latest upstream version
@@ -68,7 +74,6 @@ jobs:
           ARCH=x86_64 VERSION="$VERSION" ./squashfs-root/AppRun AppDir "Nextcloud-Talk-${VERSION}-x86_64.AppImage"
 
       - name: Publish GitHub Release
-        # Updated to v3 which supports Node 24 natively
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.upstream.outputs.version }}
