@@ -27,13 +27,32 @@ jobs:
           VERSION="${{ steps.upstream.outputs.version }}"
           ZIP_URL="https://github.com/nextcloud/talk-desktop/releases/download/${VERSION}/Nextcloud.Talk-linux-x64.zip"
           
-          wget -q "$ZIP_URL" -O talk.zip
-          unzip -q talk.zip
+          # Try official repo first, fallback to nextcloud-releases org if needed
+          wget -q "$ZIP_URL" -O talk.zip || \
+          wget -q "https://github.com/nextcloud-releases/talk-desktop/releases/download/${VERSION}/Nextcloud.Talk-linux-x64.zip" -O talk.zip
           
-          mv "Nextcloud Talk-linux-x64" AppDir
+          mkdir -p AppDir
+          mkdir -p temp_extract
+          unzip -q talk.zip -d temp_extract
+          
+          # Find the dynamically named extracted folder and move contents to AppDir
+          EXTRACTED_DIR=$(find temp_extract -mindepth 1 -maxdepth 1 -type d | head -n 1)
+          
+          if [ -n "$EXTRACTED_DIR" ]; then
+            mv "$EXTRACTED_DIR"/* AppDir/
+            mv "$EXTRACTED_DIR"/.* AppDir/ 2>/dev/null || true
+          else
+            mv temp_extract/* AppDir/
+          fi
+          
+          rm -rf temp_extract talk.zip
 
       - name: Create AppRun launcher
         run: |
+          # Ensure the main executable has execution rights
+          chmod +x "AppDir/Nextcloud Talk"
+          
+          # Create the AppRun wrapper
           cat > AppDir/AppRun << 'EOF'
           #!/bin/bash
           HERE="$(dirname "$(readlink -f "$0")")"
@@ -70,8 +89,12 @@ jobs:
       - name: Build AppImage
         run: |
           VERSION="${{ steps.upstream.outputs.version }}"
-          ./appimagetool --appimage-extract
-          ARCH=x86_64 VERSION="$VERSION" ./squashfs-root/AppRun AppDir "Nextcloud-Talk-${VERSION}-x86_64.AppImage"
+          
+          # Use APPIMAGE_EXTRACT_AND_RUN to safely run AppImages in CI without FUSE
+          export APPIMAGE_EXTRACT_AND_RUN=1
+          export ARCH=x86_64
+          
+          ./appimagetool AppDir "Nextcloud-Talk-${VERSION}-x86_64.AppImage"
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v3
