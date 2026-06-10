@@ -1,24 +1,17 @@
-name: Build Nextcloud Talk AppImage
-
-on:
-  schedule:
-    - cron: '0 6 * * 1' # Runs every Monday at 06:00 UTC
-  workflow_dispatch:    # Allows manual triggering from the Actions tab
-
 jobs:
   build-and-release:
     runs-on: ubuntu-22.04
     permissions:
-      contents: write   # Required to publish GitHub Releases
+      contents: write
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        # Updated to native Node 24 version
+        uses: actions/checkout@v5 
 
       - name: Get latest upstream version
         id: upstream
         run: |
-          # Fetch latest release tag from the official repo
           VERSION=$(curl -s https://api.github.com/repos/nextcloud/talk-desktop/releases/latest | jq -r '.tag_name')
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Building version: $VERSION"
@@ -31,13 +24,10 @@ jobs:
           wget -q "$ZIP_URL" -O talk.zip
           unzip -q talk.zip
           
-          # The zip extracts to a folder named "Nextcloud Talk-linux-x64"
-          # Rename it to AppDir for standard AppImage packaging
           mv "Nextcloud Talk-linux-x64" AppDir
 
       - name: Create AppRun launcher
         run: |
-          # Create an AppRun script to handle the executable with a space in its name
           cat > AppDir/AppRun << 'EOF'
           #!/bin/bash
           HERE="$(dirname "$(readlink -f "$0")")"
@@ -62,7 +52,6 @@ jobs:
 
       - name: Download application icon
         run: |
-          # Fetch the official icon from the Nextcloud Talk Desktop repo
           ICON_URL="https://raw.githubusercontent.com/nextcloud/talk-desktop/main/build/icons/512x512.png"
           wget -q "$ICON_URL" -O AppDir/nextcloud-talk.png || \
           wget -q "https://raw.githubusercontent.com/nextcloud/talk-desktop/main/build/icon.png" -O AppDir/nextcloud-talk.png
@@ -75,14 +64,12 @@ jobs:
       - name: Build AppImage
         run: |
           VERSION="${{ steps.upstream.outputs.version }}"
-          # Extract the AppImage tool (to avoid FUSE issues in CI environments)
           ./appimagetool --appimage-extract
-          
-          # Build the final AppImage using the extracted tool
           ARCH=x86_64 VERSION="$VERSION" ./squashfs-root/AppRun AppDir "Nextcloud-Talk-${VERSION}-x86_64.AppImage"
 
       - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
+        # Updated to v3 which supports Node 24 natively
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.upstream.outputs.version }}
           name: Nextcloud Talk ${{ steps.upstream.outputs.version }}
